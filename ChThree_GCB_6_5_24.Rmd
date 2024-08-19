@@ -1,0 +1,701 @@
+---
+title: "ChThree_GCB_6_5_24"
+output: html_document
+date: "2024-06-05"
+editor_options: 
+  chunk_output_type: console
+---
+
+Set WD
+```{r}
+setwd("/Users/whiteabalone/Desktop/WACBP/gradschool/UVM/Copepods/ExperimentalData_UVM")
+```
+
+Load in libraries
+```{r}
+library(lsr)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(ggExtra)
+library(rcompanion)
+library(FSA)
+library(car)
+library(ARTool)
+library(rstatix)
+library(reshape2)
+library(ecotox)
+library(MASS)
+library(drc)
+library(broom)
+library(maps)
+library(drc)
+library(lme4)
+library(lmtest)
+library(fmsb)
+library(faraway)
+library(rsq)
+library(ggcorrplot)
+library(ggpmisc)
+library(dplyr)
+library(leaps)
+library(AICcmodavg)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(corrplot)
+library(gridExtra)
+library(grid)
+library(cowplot)
+library(lattice)
+```
+
+# Map code for Figure One by Melissa Pespeni
+# Get world map data
+```{r}
+world_map <- map_data("world")
+```
+
+
+
+# Sample colors for each point
+#point_colors <- c("blue", "green", "red")
+```{r}
+point_colors_noCT <- c("dodgerblue","springgreen", "deeppink")
+```
+
+
+# Create a grayscale map with focused coordinates
+
+```{r}
+
+ggplot() +
+  geom_map(data = world_map, map = world_map,
+           aes(x = long, y = lat, map_id = region),
+           fill = "grey", color = NA, size = 0.2) + # color NA gets rid of political boundaries
+  coord_fixed(xlim = c(-85, -61),
+              ylim = c(24.5, 46)) +
+  theme_void() +
+               
+  # Add point markers based on latitude and longitude
+  geom_point(data = data.frame(longitude = c(-68.54,-73.03, -82.01),
+                               latitude = c(44.02, 40.95, 26.48)),
+             aes(x = longitude, y = latitude), shape = 23, alpha = 0.8,
+             fill = point_colors_noCT, color = "black",size = 10) +
+  
+  # Add labels to the points
+  geom_text(data = data.frame(longitude = c(-68.54,-73.03, -82.01),
+                              latitude = c(44.02,40.95, 26.48)),
+                              label = c("ME","LIS", "FL"),
+            aes(x = longitude, y = latitude, label = label),
+            hjust = 0, vjust = 0, nudge_x = .5, nudge_y = -1.5, size = 10, fontface = "bold") +
+  
+  # Add a box around the plot
+  theme(
+    panel.border = element_rect(color = "black", size = 1, fill = NA),
+    plot.margin = margin(10, 10, 10, 10)
+  )
+```
+
+
+# Data analysis and plotting for ULT and LT50
+
+Loading in ULT Data
+```{r}
+
+mydata <- read.table("LHS_ctmax_Complete.csv", header=TRUE, 
+  	sep=",")
+head(mydata)
+```
+
+Looking to see if data is normally distributed
+
+```{r}
+ggqqplot(mydata$Ctmax) 
+# Q-Q plot (or quantile-quantile plot) draws the correlation between a given sample 
+# and the normal distribution. A 45-degree reference line is also plotted.
+
+ggdensity(mydata$Ctmax, xlab = "Ctmax") 
+
+shapiro.test(mydata$Ctmax)
+```
+	Shapiro-Wilk normality test
+
+data:  mydata$Ctmax
+W = 0.97046, p-value = 0.02188
+
+
+```{r}
+hist(mydata$Ctmax, 
+     main="Ctmax", 
+     xlab="Ctmax", 
+     border="light blue", 
+     col="blue", 
+     las=1, 
+     breaks=5)
+```
+
+Checking for homogeneity of variance
+```{r}
+leveneTest(Ctmax~Population*Stage, data=mydata)
+```
+Levene's Test for Homogeneity of Variance (center = median)
+      Df F value Pr(>F)
+group  8  0.8667 0.5475
+      93     
+      
+Aligned Rank Transform ANOVA for conducting nonparametric analyses of variance on factorial models
+```{r}
+mydata$Population <- as.factor(mydata$Population)
+
+mydata$Stage <- as.factor(mydata$Stage)
+```
+
+
+```{r}
+m <- art(Ctmax ~ Population*Stage, data=mydata)
+summary(m)
+```
+Aligned Rank Transform of Factorial Model
+
+Call:
+art(formula = Ctmax ~ Population * Stage, data = mydata)
+
+Column sums of aligned responses (should all be ~0):
+      Population            Stage Population:Stage 
+               0                0                0 
+
+F values of ANOVAs on aligned responses not of interest (should all be ~0):
+    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+0.000000 0.000000 0.000000 0.009425 0.017514 0.033199 
+
+
+```{r}
+ARTaov <- anova(m)
+summary(ARTaov)
+ARTaov
+```
+Analysis of Variance of Aligned Rank Transformed Data
+
+Table Type: Anova Table (Type III tests) 
+Model: No Repeated Measures (lm)
+Response: art(Ctmax)
+
+                   Df Df.res F value     Pr(>F)    
+1 Population        2     93  36.893 1.6000e-12 ***
+2 Stage             2     93  26.197 9.4658e-10 ***
+3 Population:Stage  4     93   1.700    0.15663 
+
+```{r}
+
+
+ARTaov$part.eta.sq = with(ARTaov, `Sum Sq`/(`Sum Sq` + `Sum Sq.res`))
+
+ARTaov
+```
+                   Df Df.res F value     Pr(>F) part.eta.sq    
+1 Population        2     93  36.893 1.6000e-12    0.442397 ***
+2 Stage             2     93  26.197 9.4658e-10    0.360355 ***
+3 Population:Stage  4     93   1.700    0.15663    0.068135 
+
+Using the same package to look at contrasts
+```{r}
+ModelContrast <- art.con(m,"Stage")
+
+ModelContrast
+
+```
+ contrast             estimate   SE df t.ratio p.value
+ Adult - Copepodite      -41.6 5.94 93  -6.998  <.0001
+ Adult - Nauplii         -10.4 5.80 93  -1.801  0.1748
+ Copepodite - Nauplii     31.1 5.94 93   5.240  <.0001
+ 
+ 
+```{r}
+art.con(m,"Population")
+```
+ contrast          estimate   SE df t.ratio p.value
+ Florida - Maine       46.6 5.57 93   8.363  <.0001
+ Florida - NewYork     15.2 5.66 93   2.693  0.0227
+ Maine - NewYork      -31.4 5.49 93  -5.711  <.0001
+ 
+Code for Figure Two
+```{r}
+mysubdata <- within(mydata, rm(Plate))
+mysubsubdata <- within(mysubdata, rm(Sex))
+mysubsubdata
+
+mysubsetdata <- within(mysubsubdata, rm(MeanMax))
+mysubsetdata
+```
+
+
+```{r}
+mydata_melt <- melt(mysubsetdata)
+mydata_melt
+```
+
+
+
+Now let's try plotting again with this new data frame
+```{r}
+plot1 <- (ggplot(mydata_melt,aes(x=Stage,y=value,fill=Population))+geom_boxplot())
+
+plot2 <- (plot1 + geom_dotplot(binaxis='y', stackdir='center',
+                 position=position_dodge(.85))+scale_fill_manual(values=c("grey3","grey3","grey3") ))
+plot2
+
+plot2 + scale_fill_manual(values=c("red4","red3","tomato"))
+```
+
+
+Need to reorder graph
+
+```{r}
+mydata_melt$Stage <- factor(mydata_melt$Stage,
+    levels = c("Nauplii","Copepodite","Adult"),ordered = TRUE)
+
+mydata_melt$Population <- factor(mydata_melt$Population,
+    levels = c("Maine","NewYork","Florida"),ordered = TRUE)
+
+plot1 <- (ggplot(mydata_melt,aes(x=Stage,y=value,fill=Population))+geom_boxplot(width=0.9/length(unique(mydata_melt$Stage)),position=position_dodge(0.5)))
+
+plot2 <- (plot1 + geom_dotplot(binaxis='y', stackdir='center', dotsize=0.75,
+                 position=position_dodge(0.5))+scale_fill_manual(values=c("grey3","grey3","grey3") ))
+plot2
+
+plot2 +scale_fill_manual(values=c("dodgerblue", "springgreen", "deeppink")) +ylab("Upper Lethal Temperature (°C)") + theme_bw(base_size=25) + scale_y_continuous(breaks=seq(30,42,by=2)) 
+```
+
+For figure legends need to record number of individuals in each treatment
+```{r}
+count(mydata, Stage, Population)
+``` 
+
+
+LT50 Data analysis
+```{r}
+dat <- read_csv("LD50Data.csv")
+
+dat$Stage <- factor(dat$Stage , levels = c("Nauplii", "Copepodite", "Adult"))
+
+dat$Population <- factor(dat$Population , levels = c("Maine", "NewYork", "Florida"))
+```
+
+```{r}
+fitPop <- drm(Alive/Total~Temp, Population, data=dat,type='binomial',fct=LL.3())
+ 
+ED(fitPop, 50)
+
+fitStage <- drm(Alive/Total~Temp, Stage, data=dat,type='binomial',fct=LL.3())
+plotStage <- plot(fitStage, col=T)
+ED(fitStage, 50)
+```
+Estimated effective doses
+
+             Estimate Std. Error
+e:Florida:50 38.09878    0.38248
+e:Maine:50   35.23082    0.34569
+e:NewYork:50 37.13733    0.44536
+
+Estimated effective doses
+
+                Estimate Std. Error
+e:Adult:50      36.10212    0.40128
+e:Copepodite:50 37.89030    0.51436
+e:Nauplii:50    36.25248    0.63576
+
+
+Code for Figure Three
+```{r}
+exploratory_curve <-
+      ggplot(data = dat,
+           aes(
+             x = Temp,
+             y = Alive/Total,
+             # You can play aroung the group value
+             
+             color = Population,
+             shape = Population)) +
+      geom_point(size=5) +
+      geom_smooth( size = 2.5,
+        method = drm,
+        method.args = list(
+          fct = LL.3()),
+        se = FALSE
+      ) + scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+ylab('Proportion Alive')+xlab('Temperature (°C)')+   facet_grid(dat$Stage) +theme_bw() +
+theme(text = element_text(size=25),legend.position="bottom")
+
+exploratory_curve
+```
+
+Environmental Data analysis and figures
+
+
+```{r}
+mydata <- read.csv('LHS_ctmax_Complete_ENVDATTEMP_6_3_24.csv')
+```
+
+
+```{r}
+#Removing non numerical variables
+NumericData <- subset(mydata, select = -c(1, 2, 3, 5))
+NumericData
+datamatrix = cor(NumericData)
+  corrplot(datamatrix, method = 'number')
+  
+#Want to rename the columns
+  names(NumericData) <- c('ULT','DecadeMeanTemp', 'DecadeMaxTemp', 'DecadeMinTemp', 'DecadeTempRange', 'SummerMeanTemp', 'SummerMaxTemp', 'SummerMinTemp', 'SummerTempRange', 'CollectionMeanTemp', 'CollectionMaxTemp', 'CollectionMinTemp', 'CollectionTempRange')
+```
+
+```{r}
+corrplot(cor(NumericData),
+   method = "color", 
+   addCoef.col="black", 
+   order = "AOE", 
+   number.cex=0.75)
+```
+
+Supplemental Figure One
+```{r}
+
+corrplot(as.matrix(cor(NumericData)), tl.cex = 0.5, tl.col = "black", method = "color", 
+         outline = T,  order="hclust", 
+         addCoef.col = "black", number.digits = 2, number.cex = .5, 
+         cl.pos = 'b', cl.cex = .5, addrect = 3, rect.lwd = 3, 
+         col = colorRampPalette(c("midnightblue", "white","darkred"))(100))
+```
+
+Plotting Environmental Data Variables against ULT for Figure Four
+
+```{r}
+
+#first plot decade min mean max and range
+
+#DecadeMin
+
+mydata$Population <- factor(mydata$Population , levels = c("Maine", "NewYork", "Florida"))
+
+ p1 <- DecadeMin <- ggplot(mydata, aes(x=DecadeMin, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Minimum Temperature') + theme_classic(base_size=12) +theme(legend.position = "none")+xlim(5,40)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#DecadeMean
+
+p2 <- ggplot(mydata, aes(x=DecadeMean, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Mean Temperature') + theme_classic(base_size=12)  +theme(legend.position = "none")+ xlim(5,40)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#DecadeMax
+
+p3 <- ggplot(mydata, aes(x=DecadeMax, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Maximum Temperature ') + theme_classic(base_size=12)  +theme(legend.position = "none")+ xlim(5,40)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#DecadeRange
+
+p4 <- ggplot(mydata, aes(x=DecadeRange, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Temperature Range (°C)') + theme_classic(base_size=12)  +theme(legend.position = "none")+ xlim(0,25)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#SummerMin
+
+p5 <- ggplot(mydata, aes(x=SummerMin, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Minimum Temperature') + theme_classic(base_size=12) +theme(legend.position = "none")+ xlim(5,40)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#SummerMean
+
+p6 <- ggplot(mydata, aes(x=SummerMean, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Mean Temperature ') + theme_classic(base_size=12)  +theme(legend.position = "none")+ xlim(5,40)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#SummerMax
+
+p7 <- ggplot(mydata, aes(x=SummerMax, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Maximum Temperature') + theme_classic(base_size=12)  +theme(legend.position = "none")+ xlim(5,40)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#SummerRange
+
+p8 <- ggplot(mydata, aes(x=SummerRange, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Temperature Range (°C)') + theme_classic(base_size=12) +theme(legend.position  = "none")+ xlim(0,25)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#CollectionMin
+
+p9 <- ggplot(mydata, aes(x=CollectionMin, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Minimum Temperature') + theme_classic(base_size=12)  +theme(legend.position = "none")+ xlim(5,40) +scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#CollectionMean
+
+p10 <- ggplot(mydata, aes(x=CollectionMean, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Mean Temperature') + theme_classic(base_size=12)  +theme(legend.position = "none")+ xlim(5,40)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#CollectionMax
+
+p11 <- ggplot(mydata, aes(x=CollectionMax, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Maximum Temperature') + theme_classic(base_size=12) +theme(legend.position = "none")+ xlim(5,40)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#CollectionRange
+
+p12 <- ggplot(mydata, aes(x=CollectionRange, y=ULT))  +
+  geom_point(aes(shape=Population, color=Population), size = 5)+ 
+  scale_shape_manual(values = c(0, 1, 2)) + geom_smooth(se=FALSE, method=lm)+ ylab("")  + xlab('Temperature Range (°C)') + theme_classic(base_size=12) +theme(legend.position = "none")+ xlim(0,25)+scale_y_continuous(minor_breaks = seq(30 , 48, 1), breaks = seq(30, 48, 4), limits=c(30,48))+ scale_color_manual(values=c("dodgerblue", "springgreen", "deeppink"))+stat_cor(aes(label = ..rr.label..), color = "red", geom = "label", label.x = 10, label.y = 46, size=4.5)
+
+#for adding r2 if we want to add back in at some point
+#+stat_cor(aes(label = ..r.label..), color = "red", geom = "label", label.x = -8, label.y = 45, size=5)
+
+```
+
+```{r}
+title1=text_grob('Upper Lethal Temperature (°C)', size = 20, rot=90)
+title2=text_grob('Decade', size = 20)
+```
+
+Put plots together
+```{r}
+myLegend <- get_legend(p1 + theme(legend.position="bottom") )
+
+grid.arrange(arrangeGrob(p1,p2,p3,p4,top=textGrob("Decade", gp=gpar(fontsize=15,font=8)), ncol=4), 
+             arrangeGrob(p5,p6,p7,p8,top=textGrob("Summer", gp=gpar(fontsize=15,font=8)), ncol=4), 
+             arrangeGrob(p9,p10,p11,p12,top=textGrob("Month", gp=gpar(fontsize=15,font=8)), ncol=4), 
+             myLegend,
+             nrow=4, heights=c(1,1,1,0.2),
+             left=title1)
+
+```
+
+Environmental Data analysis
+
+Building individual models to compare
+```{r}
+ModelDecadeMean <- lm(ULT~DecadeMean, data = mydata)
+ModelDecadeMax <- lm(ULT~DecadeMax, data = mydata)
+ModelDecadeMin <- lm(ULT~DecadeMin, data = mydata)
+ModelDecadeRange <- lm(ULT~DecadeRange, data = mydata)
+ModelSummerMean <- lm(ULT~SummerMean, data = mydata)
+ModelSummerMax <- lm(ULT~SummerMax, data = mydata)
+ModelSummerMin <- lm(ULT~SummerMin, data = mydata)
+ModelSummerRange <- lm(ULT~SummerRange, data = mydata)
+ModelCollectionMean <- lm(ULT~CollectionMean, data = mydata)
+ModelCollectionMax <- lm(ULT~CollectionMax, data = mydata)
+ModelCollectionMin <- lm(ULT~CollectionMin, data = mydata)
+ModelCollectionRange <- lm(ULT~CollectionRange, data = mydata)
+```
+
+```{r}
+#define list of models
+models <- list(ModelDecadeMean, ModelDecadeMax, ModelDecadeMin, ModelDecadeRange, ModelSummerMean, ModelSummerMax, ModelSummerMin, ModelSummerRange, ModelCollectionMean, ModelCollectionMax, ModelCollectionMin, ModelCollectionRange)
+
+#specify model names
+mod.names <- c('DMean', 'DMax', 'DMin', 'DRange', 'SMean', 'SMax', 'SMin', 'SRange', 'CMean', 'CMax', 'CMin', 'CRange')
+
+#calculate AIC of each model
+aictab(cand.set = models, modnames = mod.names)
+```
+Model selection based on AICc:
+
+       K   AICc Delta_AICc AICcWt Cum.Wt      LL
+SMax   3 413.95       0.00   0.75   0.75 -203.85
+SMean  3 417.53       3.57   0.12   0.87 -205.64
+DMean  3 418.11       4.16   0.09   0.96 -205.93
+CMax   3 421.18       7.22   0.02   0.98 -207.47
+SMin   3 422.80       8.85   0.01   0.99 -208.28
+DMax   3 425.24      11.29   0.00   0.99 -209.50
+DMin   3 426.02      12.07   0.00   1.00 -209.89
+DRange 3 426.55      12.60   0.00   1.00 -210.15
+CMean  3 426.66      12.71   0.00   1.00 -210.21
+CMin   3 427.72      13.77   0.00   1.00 -210.74
+SRange 3 439.32      25.37   0.00   1.00 -216.54
+CRange 3 439.45      25.50   0.00   1.00 -216.60
+
+Lower Lethal Salinity Analysis and Plots
+
+Loading in LLS Data
+```{r}
+Saldata <- read.table("LLSDataJess.csv", header=TRUE, 
+  	sep=",")
+head(Saldata)
+
+names(Saldata)<- c("Population","Stage","LLS")
+
+Saldata
+```
+
+For figure legends need to record number of individuals in each treatment
+```{r}
+count(Saldata, Stage, Population)
+```
+
+Looking to see if data is normally distributed
+
+```{r}
+ggqqplot(Saldata$LLS) 
+# Q-Q plot (or quantile-quantile plot) draws the correlation between a given sample 
+# and the normal distribution. A 45-degree reference line is also plotted.
+
+ggdensity(Saldata$LLS, xlab = "LLS") 
+
+shapiro.test(Saldata$LLS)
+```
+
+data:  mydata$LLS
+W = 0.87258, p-value = 5.042e-08
+Super not normal 
+
+```{r}
+hist(Saldata$LLS, 
+     main="LLS", 
+     xlab="LLS", 
+     border="light blue", 
+     col="blue", 
+     las=1, 
+     breaks=5)
+```
+Data skewed right
+
+
+```{r}
+str(Saldata)
+```
+
+105 observations
+
+
+Checking for homogeneity of variance
+```{r}
+leveneTest(LLS~Population*Stage, data=Saldata)
+```
+      Df F value  Pr(>F)  
+group  8  2.2525 0.02992 *
+
+Not homogeneous
+
+So we use ART ANOVA
+```{r}
+Saldata$Population <- as.factor(Saldata$Population)
+
+Saldata$Stage <- as.factor(Saldata$Stage)
+
+Saldata
+```
+
+```{r}
+
+mawdel <- art(LLS ~ Population*Stage, data=Saldata)
+summary(mawdel)
+```
+Call:
+art(formula = Ctmax ~ Population * Stage, data = mydata)
+
+Column sums of aligned responses (should all be ~0):
+      Population            Stage Population:Stage 
+               0                0                0 
+
+F values of ANOVAs on aligned responses not of interest (should all be ~0):
+    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+0.000000 0.000000 0.000000 0.009425 0.017514 0.033199 
+Warning message:
+In summary.art(m) :
+  F values of ANOVAs on aligned responses not of interest are not all ~0. ART may not be appropriate.
+  
+
+
+```{r}
+thing <- anova(mawdel)
+summary(thing)
+thing
+
+thing$part.eta.sq = with(thing, `Sum Sq`/(`Sum Sq` + `Sum Sq.res`))
+
+thing
+
+```
+                   Df Df.res F value     Pr(>F)    
+1 Population        2     96  4.0254   0.020952   *
+2 Stage             2     96 17.3716 3.6384e-07 ***
+3 Population:Stage  4     96  7.5622 2.4382e-05 ***
+
+Using the same package to look at contrasts
+```{r}
+ModelContrast <- art.con(mawdel,"Stage")
+
+ModelContrast
+
+```
+contrast              estimate   SE df t.ratio p.value
+ Adults - Copepodites   -32.869 6.50 96  -5.058  <.0001
+ Adults - Nauplii         0.591 6.40 96   0.092  0.9953
+ Copepodites - Nauplii   33.460 6.45 96   5.186  <.0001
+ 
+Calculating Cohen's d as a measure of effect size 
+```{r}
+library(emmeans)
+m.art.Stage = artlm(mawdel, "Stage")
+Stage.contrasts.art = summary(pairs(emmeans(m.art.Stage, ~ Stage)))
+
+Stage.contrasts.art$d = Stage.contrasts.art$estimate / sigmaHat(m.art.Stage)
+Stage.contrasts.art
+```
+  contrast              estimate   SE df t.ratio p.value       d
+ Adults - Copepodites   -32.869 6.50 96  -5.058  <.0001 -1.2189
+ Adults - Nauplii         0.591 6.40 96   0.092  0.9953  0.0219
+ Copepodites - Nauplii   33.460 6.45 96   5.186  <.0001  1.2408
+ 
+```{r}
+art.con(mawdel,"Population")
+```
+ contrast    estimate   SE df t.ratio p.value
+ HI - PGH       17.94 7.08 96   2.536  0.0340
+ HI - UConn      1.43 7.13 96   0.201  0.9779
+ PGH - UConn   -16.51 7.02 96  -2.350  0.0538
+
+
+
+
+
+Now let's try plotting again with this new data frame
+```{r}
+Saldata
+SalDataNoEnvDat <- Saldata[, c("Population", "Stage", "LLS")]
+
+Saldata_melt <- melt(SalDataNoEnvDat)
+Saldata_melt
+
+plot1 <- (ggplot(Saldata_melt,aes(x=Stage,y=value,fill=Population))+geom_boxplot())
+
+plot2 <- (plot1 + geom_dotplot(binaxis='y', stackdir='center',
+                 position=position_dodge(.85))+scale_fill_manual(values=c("grey3","grey3","grey3") ))
+plot2
+
+plot2 + scale_fill_manual(values=c("grey96","grey48","grey12"), labels=c("Maine","Connecticut","Florida"))
+```
+
+
+Need to reorder graph
+
+```{r}
+ Saldata_melt$Stage <- factor(Saldata_melt$Stage,
+     levels = c("Nauplii","Copepodites","Adults"),ordered = TRUE)
+ 
+ Saldata_melt$Population <- factor(Saldata_melt$Population,
+     levels = c("HI","UConn","PGH"),ordered = TRUE)
+ Saldata_melt
+
+plot1 <- (ggplot(Saldata_melt,aes(x=Stage,y=value,fill=Population))+geom_boxplot(width=0.9/length(unique(Saldata_melt$Stage)),position=position_dodge(.5)))
+
+plot2 <- (plot1 + geom_dotplot(binaxis='y', stackdir='center', dotsize=0.75,
+                 position=position_dodge(.5))+scale_fill_manual(values=c("grey3","grey3","grey3") ))
+plot2
+
+plot2 + scale_fill_manual(values=c("dodgerblue", "springgreen", "deeppink"),labels=c("Maine","Connecticut","Florida")) +ylab("Lower Lethal Salinity (ppt)") + theme_bw(base_size=25) + scale_y_continuous(breaks=seq(0,10,by=2))
+
+
+```
+
+
